@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
     <meta charset="UTF-8">
-    <title>Pong i Webbläsaren</title>
+    <title>PONG ...by Hugo!</title>
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <style>
         canvas {
@@ -27,52 +27,49 @@
 
         const paddleWidth = 10, paddleHeight = 100;
         let leftPaddleY, rightPaddleY;
-        const paddleSpeed = 7;
+        let paddleSpeed = 7;
+        let aiSpeed = 5; // opponent paddle speed for 1P mode
 
         let ballX, ballY, ballRadius = 10;
         let ballSpeedX, ballSpeedY;
+        let baseBallSpeed = 5;
 
         let leftScore, rightScore;
 
         let keys = {};
 
-        let gameState = "start"; // "start" | "modeSelect" | "difficultySelect" | "countdown" | "playing" | "gameOver"
+        let gameState = "start"; // "start" | "difficulty" | "countdown" | "playing" | "gameOver"
         let winner = "";
 
         let countdownNumber = 3;
         let countdownTimer;
 
-        let singlePlayer = false;
-        let aiSpeed = 5;
-        let baseBallSpeed = 5;
+        let mode = null;       // "1P" or "2P"
+        let difficulty = null; // "easy" | "medium" | "insane"
 
         document.addEventListener('keydown', e => {
             keys[e.key] = true;
 
-            if (gameState === "start") {
-                if (e.key === "1") { 
-                    singlePlayer = true; 
-                    gameState = "difficultySelect"; 
-                }
-                if (e.key === "2") { 
-                    singlePlayer = false; 
-                    initGame(); 
-                    startCountdown(); 
-                }
+            // --- ESC always returns to start screen ---
+            if (e.key === "Escape") {
+                gameState = "start";
+                mode = null;
+                difficulty = null;
+                return;
             }
 
-            if (gameState === "difficultySelect") {
+            if (gameState === "start") {
+                if (e.key === "1") { mode = "1P"; gameState = "difficulty"; }
+                if (e.key === "2") { mode = "2P"; initGame(); startCountdown(); }
+            } 
+            else if (gameState === "difficulty") {
                 if (e.key === "1") { setDifficulty("easy"); }
                 if (e.key === "2") { setDifficulty("medium"); }
                 if (e.key === "3") { setDifficulty("insane"); }
             }
-
-            if (gameState === "gameOver" && e.key === " ") {
+            else if (gameState === "gameOver" && e.key === " ") {
                 gameState = "start"; // go back to start screen
-            }
-
-            if (e.key === "Escape") {
-                gameState = "start"; // return to start page
+                mode = null; difficulty = null;
             }
         });
 
@@ -84,6 +81,15 @@
             leftScore = 0;
             rightScore = 0;
             resetBall();
+        }
+
+        function setDifficulty(level) {
+            difficulty = level;
+            if (level === "easy") { aiSpeed = 4; baseBallSpeed = 4; }
+            if (level === "medium") { aiSpeed = 7; baseBallSpeed = 6; }
+            if (level === "insane") { aiSpeed = 11; baseBallSpeed = 9; } // 🔥 faster ball + quick smooth AI
+            initGame();
+            startCountdown();
         }
 
         function drawRect(x, y, w, h, color) {
@@ -113,21 +119,6 @@
             ballSpeedY = baseBallSpeed * (Math.random() > 0.5 ? 1 : -1);
         }
 
-        function setDifficulty(level) {
-            if (level === "easy") {
-                aiSpeed = 4;
-                baseBallSpeed = 4;
-            } else if (level === "medium") {
-                aiSpeed = 7;
-                baseBallSpeed = 5.5;
-            } else if (level === "insane") {
-                aiSpeed = 13;
-                baseBallSpeed = 8;
-            }
-            initGame();
-            startCountdown();
-        }
-
         function startCountdown() {
             gameState = "countdown";
             countdownNumber = 3;
@@ -144,24 +135,24 @@
         function update() {
             if (gameState !== "playing") return;
 
-            // Left paddle (player 1)
+            // Left player movement (W/S)
             if (keys['w'] && leftPaddleY > 0) leftPaddleY -= paddleSpeed;
             if (keys['s'] && leftPaddleY < canvas.height - paddleHeight) leftPaddleY += paddleSpeed;
 
-            if (singlePlayer) {
-                // AI movement (smooth)
-                let targetY = ballY - paddleHeight / 2;
-                if (rightPaddleY < targetY) {
-                    rightPaddleY += aiSpeed;
-                    if (rightPaddleY > targetY) rightPaddleY = targetY;
-                } else if (rightPaddleY > targetY) {
-                    rightPaddleY -= aiSpeed;
-                    if (rightPaddleY < targetY) rightPaddleY = targetY;
-                }
-            } else {
-                // Right paddle (player 2)
+            if (mode === "2P") {
+                // Right player movement (UP/DOWN)
                 if (keys['ArrowUp'] && rightPaddleY > 0) rightPaddleY -= paddleSpeed;
                 if (keys['ArrowDown'] && rightPaddleY < canvas.height - paddleHeight) rightPaddleY += paddleSpeed;
+            } else if (mode === "1P") {
+                // --- Smooth AI movement ---
+                let paddleCenter = rightPaddleY + paddleHeight / 2;
+                if (ballY < paddleCenter - 10) {
+                    rightPaddleY -= aiSpeed;
+                } else if (ballY > paddleCenter + 10) {
+                    rightPaddleY += aiSpeed;
+                }
+                // Keep paddle inside canvas
+                rightPaddleY = Math.max(0, Math.min(canvas.height - paddleHeight, rightPaddleY));
             }
 
             // Move ball
@@ -185,12 +176,12 @@
                 ballSpeedX *= -1;
             }
 
-            // Score
+            // Scoring
             if (ballX < 0) {
                 rightScore++;
                 if (rightScore >= 10) {
                     gameState = "gameOver";
-                    winner = singlePlayer ? "Computer" : "Player 2";
+                    winner = (mode === "1P" ? "Computer" : "Player 2");
                 } else {
                     resetBall();
                 }
@@ -219,25 +210,27 @@
             else if (gameState === "gameOver") {
                 drawText("WINNER: " + winner, canvas.width / 2, canvas.height / 2, "50px", true);
                 drawText("Press SPACE to restart", canvas.width / 2, canvas.height / 2 + 80, "25px");
+                drawText("Press ESC to go to start", canvas.width / 2, canvas.height / 2 + 120, "22px");
             } 
             else if (gameState === "countdown") {
-                if (countdownNumber > 0) {
-                    drawText(countdownNumber, canvas.width / 2, canvas.height / 2, "80px", true);
-                } else {
-                    drawText("GAME ON!", canvas.width / 2, canvas.height / 2, "60px", true);
-                }
-            }
+    if (countdownNumber > 0) {
+        drawText(countdownNumber, canvas.width / 2, canvas.height / 2, "80px", true);
+    } else {
+        const color = (difficulty === "insane") ? "red" : "white";
+        drawText("GAME ON!", canvas.width / 2, canvas.height / 2, "60px", true, "Arial", color);
+    }
+}
             else if (gameState === "start") {
-                drawText("PONG", canvas.width / 2, canvas.height / 2 - 80, "100px", true);
-                drawText("Press 1 for 1 Player", canvas.width / 2, canvas.height / 2 + 20, "30px");
-                drawText("Press 2 for 2 Players", canvas.width / 2, canvas.height / 2 + 70, "30px");
+                drawText("PONG", canvas.width / 2, canvas.height / 2 - 100, "100px", true);
+                drawText("Press 1 for 1 Player", canvas.width / 2, canvas.height / 2, "35px");
+                drawText("Press 2 for 2 Players", canvas.width / 2, canvas.height / 2 + 60, "35px");
                 drawText("...by Hugo!", canvas.width - 20, canvas.height - 20, "28px", false, "Pacifico", "pink", "right");
             }
-            else if (gameState === "difficultySelect") {
-                drawText("Select Difficulty", canvas.width / 2, canvas.height / 2 - 60, "50px", true);
-                drawText("1 - Easy", canvas.width / 2, canvas.height / 2, "30px");
-                drawText("2 - Medium", canvas.width / 2, canvas.height / 2 + 40, "30px");
-                drawText("3 - Insane!", canvas.width / 2, canvas.height / 2 + 80, "30px");
+            else if (gameState === "difficulty") {
+                drawText("Select Difficulty", canvas.width / 2, canvas.height / 2 - 100, "60px", true);
+                drawText("Press 1 for EASY", canvas.width / 2, canvas.height / 2, "35px");
+                drawText("Press 2 for MEDIUM", canvas.width / 2, canvas.height / 2 + 60, "35px");
+                drawText("Press 3 for INSANE!", canvas.width / 2, canvas.height / 2 + 120, "35px", true, "Arial", "red");
             }
         }
 
