@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <title>Pong i Webbläsaren</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+    <style>
+        canvas {
+            background: black;
+            display: block;
+            margin: auto;
+            padding-top: 40px;
+        }
+        body {
+            background: #222;
+            color: white;
+            font-family: sans-serif;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="pongCanvas" width="1500" height="700"></canvas>
+    <script>
+        const canvas = document.getElementById('pongCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const paddleWidth = 10, paddleHeight = 100;
+        let leftPaddleY, rightPaddleY;
+        const paddleSpeed = 7;
+
+        let ballX, ballY, ballRadius = 10;
+        let ballSpeedX, ballSpeedY;
+
+        let leftScore, rightScore;
+
+        let keys = {};
+
+        let gameState = "start"; // "start" | "modeSelect" | "difficultySelect" | "countdown" | "playing" | "gameOver"
+        let winner = "";
+
+        let countdownNumber = 3;
+        let countdownTimer;
+
+        let singlePlayer = false;
+        let aiSpeed = 5;
+        let baseBallSpeed = 5;
+
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+
+            if (gameState === "start") {
+                if (e.key === "1") { 
+                    singlePlayer = true; 
+                    gameState = "difficultySelect"; 
+                }
+                if (e.key === "2") { 
+                    singlePlayer = false; 
+                    initGame(); 
+                    startCountdown(); 
+                }
+            }
+
+            if (gameState === "difficultySelect") {
+                if (e.key === "1") { setDifficulty("easy"); }
+                if (e.key === "2") { setDifficulty("medium"); }
+                if (e.key === "3") { setDifficulty("insane"); }
+            }
+
+            if (gameState === "gameOver" && e.key === " ") {
+                gameState = "start"; // go back to start screen
+            }
+
+            if (e.key === "Escape") {
+                gameState = "start"; // return to start page
+            }
+        });
+
+        document.addEventListener('keyup', e => keys[e.key] = false);
+
+        function initGame() {
+            leftPaddleY = canvas.height / 2 - paddleHeight / 2;
+            rightPaddleY = canvas.height / 2 - paddleHeight / 2;
+            leftScore = 0;
+            rightScore = 0;
+            resetBall();
+        }
+
+        function drawRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+        }
+
+        function drawCircle(x, y, r, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawText(text, x, y, size = "30px", bold = false, font = "Arial", color = "white", align = "center") {
+            ctx.fillStyle = color;
+            ctx.font = (bold ? "bold " : "") + size + ' ' + font;
+            ctx.textAlign = align;
+            ctx.fillText(text, x, y);
+        }
+
+        function resetBall() {
+            ballX = canvas.width / 2;
+            ballY = canvas.height / 2;
+            ballSpeedX = baseBallSpeed * (Math.random() > 0.5 ? 1 : -1);
+            ballSpeedY = baseBallSpeed * (Math.random() > 0.5 ? 1 : -1);
+        }
+
+        function setDifficulty(level) {
+            if (level === "easy") {
+                aiSpeed = 4;
+                baseBallSpeed = 4;
+            } else if (level === "medium") {
+                aiSpeed = 7;
+                baseBallSpeed = 5.5;
+            } else if (level === "insane") {
+                aiSpeed = 13;
+                baseBallSpeed = 8;
+            }
+            initGame();
+            startCountdown();
+        }
+
+        function startCountdown() {
+            gameState = "countdown";
+            countdownNumber = 3;
+
+            countdownTimer = setInterval(() => {
+                countdownNumber--;
+                if (countdownNumber < 0) {
+                    clearInterval(countdownTimer);
+                    gameState = "playing";
+                }
+            }, 1000);
+        }
+
+        function update() {
+            if (gameState !== "playing") return;
+
+            // Left paddle (player 1)
+            if (keys['w'] && leftPaddleY > 0) leftPaddleY -= paddleSpeed;
+            if (keys['s'] && leftPaddleY < canvas.height - paddleHeight) leftPaddleY += paddleSpeed;
+
+            if (singlePlayer) {
+                // AI movement (smooth)
+                let targetY = ballY - paddleHeight / 2;
+                if (rightPaddleY < targetY) {
+                    rightPaddleY += aiSpeed;
+                    if (rightPaddleY > targetY) rightPaddleY = targetY;
+                } else if (rightPaddleY > targetY) {
+                    rightPaddleY -= aiSpeed;
+                    if (rightPaddleY < targetY) rightPaddleY = targetY;
+                }
+            } else {
+                // Right paddle (player 2)
+                if (keys['ArrowUp'] && rightPaddleY > 0) rightPaddleY -= paddleSpeed;
+                if (keys['ArrowDown'] && rightPaddleY < canvas.height - paddleHeight) rightPaddleY += paddleSpeed;
+            }
+
+            // Move ball
+            ballX += ballSpeedX;
+            ballY += ballSpeedY;
+
+            // Bounce top/bottom
+            if (ballY <= 0 || ballY >= canvas.height) ballSpeedY *= -1;
+
+            // Left paddle collision
+            if (ballX - ballRadius < paddleWidth &&
+                ballY > leftPaddleY &&
+                ballY < leftPaddleY + paddleHeight) {
+                ballSpeedX *= -1;
+            }
+
+            // Right paddle collision
+            if (ballX + ballRadius > canvas.width - paddleWidth &&
+                ballY > rightPaddleY &&
+                ballY < rightPaddleY + paddleHeight) {
+                ballSpeedX *= -1;
+            }
+
+            // Score
+            if (ballX < 0) {
+                rightScore++;
+                if (rightScore >= 10) {
+                    gameState = "gameOver";
+                    winner = singlePlayer ? "Computer" : "Player 2";
+                } else {
+                    resetBall();
+                }
+            }
+            if (ballX > canvas.width) {
+                leftScore++;
+                if (leftScore >= 10) {
+                    gameState = "gameOver";
+                    winner = "Player 1";
+                } else {
+                    resetBall();
+                }
+            }
+        }
+
+        function draw() {
+            drawRect(0, 0, canvas.width, canvas.height, 'black');
+
+            if (gameState === "playing") {
+                drawRect(0, leftPaddleY, paddleWidth, paddleHeight, 'white');
+                drawRect(canvas.width - paddleWidth, rightPaddleY, paddleWidth, paddleHeight, 'white');
+                drawCircle(ballX, ballY, ballRadius, 'white');
+                drawText(leftScore, canvas.width / 4, 30, "30px", true);
+                drawText(rightScore, canvas.width * 3 / 4, 30, "30px", true);
+            } 
+            else if (gameState === "gameOver") {
+                drawText("WINNER: " + winner, canvas.width / 2, canvas.height / 2, "50px", true);
+                drawText("Press SPACE to restart", canvas.width / 2, canvas.height / 2 + 80, "25px");
+            } 
+            else if (gameState === "countdown") {
+                if (countdownNumber > 0) {
+                    drawText(countdownNumber, canvas.width / 2, canvas.height / 2, "80px", true);
+                } else {
+                    drawText("GAME ON!", canvas.width / 2, canvas.height / 2, "60px", true);
+                }
+            }
+            else if (gameState === "start") {
+                drawText("PONG", canvas.width / 2, canvas.height / 2 - 80, "100px", true);
+                drawText("Press 1 for 1 Player", canvas.width / 2, canvas.height / 2 + 20, "30px");
+                drawText("Press 2 for 2 Players", canvas.width / 2, canvas.height / 2 + 70, "30px");
+                drawText("...by Hugo!", canvas.width - 20, canvas.height - 20, "28px", false, "Pacifico", "pink", "right");
+            }
+            else if (gameState === "difficultySelect") {
+                drawText("Select Difficulty", canvas.width / 2, canvas.height / 2 - 60, "50px", true);
+                drawText("1 - Easy", canvas.width / 2, canvas.height / 2, "30px");
+                drawText("2 - Medium", canvas.width / 2, canvas.height / 2 + 40, "30px");
+                drawText("3 - Insane!", canvas.width / 2, canvas.height / 2 + 80, "30px");
+            }
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+</html>
